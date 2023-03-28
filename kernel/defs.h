@@ -67,7 +67,7 @@ void ramdiskinit(void);
 void ramdiskintr(void);
 void ramdiskrw(struct buf *);
 
-// kalloc.c
+// kalloc.c Her får man en ting til
 void *kalloc(void);
 void kfree(void *);
 void kinit(void);
@@ -119,6 +119,7 @@ void procdump(void);
 struct user_proc *ps(uint8 start, uint8 count);
 void schedls(void);
 void schedset(int id);
+struct proc *getProc(int pid);
 
 // swtch.S
 void swtch(struct context *, struct context *);
