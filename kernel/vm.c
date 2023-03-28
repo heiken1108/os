@@ -306,30 +306,29 @@ int
 uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
 {
   pte_t *pte;
-  uint64 pa, i;
+  uint64 phyadr, i;
   uint flags;
-  char *mem;
 
-  for(i = 0; i < sz; i += PGSIZE){
-    if((pte = walk(old, i, 0)) == 0)
+  for (i = 0; i < sz; i += PGSIZE) {
+    if (!(pte = walk(old, i, 0))) {
       panic("uvmcopy: pte should exist");
-    if((*pte & PTE_V) == 0)
+    } else if (!(*pte & PTE_V)) {
       panic("uvmcopy: page not present");
-    pa = PTE2PA(*pte);
+    }
+      
+    phyadr = PTE2PA(*pte);
+    *pte &= ~PTE_W;
     flags = PTE_FLAGS(*pte);
-    if((mem = kalloc()) == 0)
-      goto err;
-    memmove(mem, (char*)pa, PGSIZE);
-    if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
-      kfree(mem);
-      goto err;
+
+    inc(phyadr);
+    
+    if (mappages(new, i, PGSIZE, (uint64)phyadr, flags) != 0) {
+      uvmunmap(new, 0, i / PGSIZE, 1);
+      return -1;
     }
   }
   return 0;
-
- err:
-  uvmunmap(new, 0, i / PGSIZE, 1);
-  return -1;
+  
 }
 
 // mark a PTE invalid for user access.
@@ -436,4 +435,25 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
   } else {
     return -1;
   }
+}
+
+int cowfault(pagetable_t pagetable, uint64 viradr)
+{
+  if (viradr >= MAXVA) {
+    return -1;
+  }
+    
+  pte_t *pte = walk(pagetable, viradr, 0);
+  if (!pte || !(*pte & PTE_U) || !(*pte & PTE_V)) {
+    return -1;
+  }
+  uint64 phyadr1 = PTE2PA(*pte);
+  uint64 phyadr2 = (uint64)kalloc();
+  if (!phyadr2) {
+    return -1;
+  }
+  memmove((void *)phyadr2, (void *)phyadr1, PGSIZE);
+  *pte = PA2PTE(phyadr2) | PTE_U | PTE_V | PTE_W | PTE_X | PTE_R;
+  kfree((void *)phyadr1);
+  return 0;
 }
